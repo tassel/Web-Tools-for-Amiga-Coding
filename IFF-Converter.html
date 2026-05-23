@@ -1,0 +1,1487 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>IFF-Converter (web remake)</title>
+<style>
+  :root{
+    --gray:     #a8a8a8;  /* panel gray */
+    --gray-d:   #7c7c7c;  /* shadow */
+    --gray-l:   #dcdcdc;  /* highlight */
+    --blue:     #5b7aa6;  /* steel blue title/buttons */
+    --blue-d:   #3d567a;
+    --blue-l:   #7e9ec9;
+    --field:    #7e7e7e;  /* recessed field bg */
+    --fieldtxt: #9fc3ff;  /* light blue value text */
+    --white:    #ffffff;
+    --black:    #000000;
+    --orange:   #ff9b33;  /* crosshair */
+  }
+  
+  * {
+    box-sizing: border-box;
+  }
+  
+  html,body {
+    margin: 0;
+    height: 100%;
+  }
+  
+  body {
+    background: #202020;
+    font-family: "Lucida Console","Courier New",monospace;
+    font-size: 14px;
+    color: #000;
+    -webkit-font-smoothing: none;
+    overflow: hidden;
+    user-select: none;
+  }
+
+  /* ---- bevel helpers ---- */
+  .bevel-out {
+    border: 2px solid;
+    border-color: var(--gray-l) var(--gray-d) var(--gray-d) var(--gray-l);
+  }
+
+  .bevel-in {
+    border: 2px solid;
+    border-color: var(--gray-d) var(--gray-l) var(--gray-l) var(--gray-d);
+  }
+
+  #screen {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+  }
+
+  /* ================= TOOLBAR ================= */
+  #toolbar {
+    background: var(--gray);
+    border-bottom: 2px solid var(--gray-d);
+    padding: 6px 8px 8px 8px;
+    display: grid;
+    grid-template-columns: minmax(360px,1fr) auto auto 1fr;
+    gap: 8px;
+    align-items: start;
+  }
+  .panel {
+    background: var(--gray);
+  }
+
+  .titlebar {
+    background: var(--blue);
+    color: var(--white);
+    padding: 3px 8px;
+    border: 2px solid;
+    border-color: var(--blue-l) var(--blue-d) var(--blue-d) var(--blue-l);
+    line-height: 1.15;
+    font-weight: bold;
+    letter-spacing: .5px;
+    margin-bottom: 6px;
+    text-shadow: 1px 1px 0 var(--blue-d);
+  }
+
+  .titlebar .sub {
+    font-weight: normal;
+    font-size: 12px;
+  }
+
+  .fields {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 6px;
+    flex-wrap: wrap;
+  }
+  
+  .field {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .field label {
+    font-size: 11px;
+    font-weight: bold;
+    margin-bottom: 2px;
+    letter-spacing: .5px;
+  }
+  
+  .field input {
+    width: 62px;
+    text-align: center;
+    background: var(--field);
+    color: var(--fieldtxt);
+    border: 2px solid;
+    border-color: var(--gray-d) var(--gray-l) var(--gray-l) var(--gray-d);
+    font-family: inherit;
+    font-size: 13px;
+    padding: 2px 0;
+    outline: none;
+    font-weight:bold;
+  }
+
+  .field input:focus {
+    background: #6a6a6a;
+    color: #cfe0ff;
+  }
+  .field input::-webkit-inner-spin-button {
+    -webkit-appearance: none;
+  }
+
+  .statusline {
+    background: var(--field);
+    color: var(--fieldtxt);
+    border: 2px solid;
+    border-color: var(--gray-d) var(--gray-l) var(--gray-l) var(--gray-d);
+    padding: 2px 8px;
+    font-size: 12px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .btncol {
+    display: flex;
+    flex-direction: column;
+    gap: 5px;
+  }
+  
+  .abtn {
+    background: var(--blue);
+    color: var(--white);
+    border: 2px solid;
+    border-color: var(--blue-l) var(--blue-d) var(--blue-d) var(--blue-l);
+    padding: 4px 10px;
+    font-family: inherit;
+    font-size: 13px;
+    font-weight: bold;
+    cursor: pointer;
+    text-align: center;
+    letter-spacing: .5px;
+    text-shadow: 1px 1px 0 var(--blue-d);
+    white-space: nowrap;
+  }
+
+  .abtn:hover {
+    background: var(--blue-l);
+  }
+  
+  .abtn:active, .abtn.on {
+    border-color: var(--blue-d) var(--blue-l) var(--blue-l) var(--blue-d);
+    background: var(--blue-d);
+  }
+
+  .abtn.on {
+    color: #bfe9ff;
+  }
+  .abtn.wide {
+    width:100%;
+  }
+
+  .info {
+    background: var(--blue);
+    color: var(--white);
+    border: 2px solid;
+    border-color: var(--blue-l) var(--blue-d) var(--blue-d) var(--blue-l);
+    padding: 4px 8px;
+    font-size: 12px;
+    line-height: 1.25;
+    overflow: auto;
+    max-height: 150px;
+  }
+
+  .info b {
+    color: #ffd24a;
+  }
+  .info hr {
+    border: none;
+    border-top: 1px solid var(--blue-l);
+    margin: 3px 0;
+  }
+
+  /* ================= WORKSPACE ================= */
+  #workspace {
+    flex: 1;
+    position: relative;
+    background: #000;
+    overflow: auto;
+  }
+
+  #stage {
+    position: relative;
+    transform-origin: top left;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+  }
+
+  #imgCanvas {
+    display: block;
+    image-rendering: pixelated;
+    background: #000;
+  }
+  
+  #overlay {
+    position: absolute;
+    left:0;
+    top:0;
+    image-rendering: pixelated;
+    cursor: none;
+  }
+  
+  #emptyMsg {
+    position: absolute;
+    left: 50%;
+    top: 50%;
+    transform: translate(-50%,-50%);
+    color: #444;
+    font-size: 14px;
+    text-align: center;
+    pointer-events: none;
+    text-shadow: 0 0 2px #000;
+  }
+
+  /* zoom + extra controls bar */
+  #subbar {
+    background: var(--gray);
+    border-top: 2px solid var(--gray-l);
+    padding: 4px 8px;
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    flex-wrap: wrap;
+    font-size: 12px;
+  }
+  
+  #subbar .grp {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+  }
+  
+  #subbar label {
+    font-weight: bold;
+    font-size: 11px;
+  }
+  
+  .zbtn {
+    background: var(--blue);
+    color: #fff;
+    border: 2px solid;
+    border-color: var(--blue-l) var(--blue-d) var(--blue-d) var(--blue-l);
+    padding: 2px 8px;
+    font-family: inherit;
+    font-weight: bold;
+    cursor: pointer;
+    font-size: 12px;
+  }
+
+  .zbtn:active {
+    border-color: var(--blue-d) var(--blue-l) var(--blue-l) var(--blue-d);
+  }
+  
+  select.asel {
+    background: var(--field);
+    color: var(--fieldtxt);
+    font-family: inherit;
+    font-weight: bold;
+    border: 2px solid;
+    border-color: var(--gray-d) var(--gray-l) var(--gray-l) var(--gray-d);
+    padding: 1px 2px;
+    font-size: 12px;
+  }
+
+  /* preview popup */
+  #preview {
+    position: absolute;
+    right: 8px;
+    bottom: 8px;
+    z-index: 30;
+    background: var(--gray);
+    padding: 6px;
+    display: none;
+    border: 2px solid;
+    border-color: var(--gray-l) var(--gray-d) var(--gray-d) var(--gray-l);
+    box-shadow: 4px 4px 0 rgba(0,0,0,.4);
+  }
+
+  #preview .ttl {
+    background: var(--blue);
+    color: #fff;
+    font-weight: bold;
+    padding: 2px 6px;
+    margin-bottom: 4px;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+  }
+  
+  #preview .ttl span {
+    cursor: pointer;
+  }
+  
+  #prevCanvas {
+    background: #000;
+    display: block;
+    image-rendering: pixelated;
+    border: 1px solid #000;
+    max-width: 320px;
+    max-height:240px;
+  }
+  
+  #palStrip {
+    display: flex;
+    flex-wrap: wrap;
+    width: 272px;
+    margin-top: 4px;
+  }
+  
+  #palStrip div {
+    width: 17px;
+    height: 17px;
+    box-sizing: border-box;
+    border: 1px solid #00000055;
+  }
+  
+  #prevInfo {
+    font-size: 11px;
+    margin-top: 4px;
+    font-weight: bold;
+  }
+
+  /* toast */
+  #toast {
+    position: absolute;
+    left: 50%;
+    top: 14px;
+    transform: translateX(-50%);
+    background: var(--blue-d);
+    color: #fff;
+    padding: 6px 14px;
+    font-weight: bold;
+    border: 2px solid;
+    border-color: var(--blue-l) #1d2c40 #1d2c40 var(--blue-l);
+    z-index: 50;
+    display:none;
+    font-size:13px;
+  }
+  input[type=file] {
+    display: none;
+  }
+</style>
+</head>
+<body>
+<div id="screen">
+
+  <!-- ===================== TOOLBAR ===================== -->
+  <div id="toolbar">
+
+    <!-- column 1: title + fields + status -->
+    <div class="panel">
+      <div class="titlebar">
+        IFF-Converter<br><span class="sub">web remake &mdash; planar / RAW exporter</span>
+      </div>
+      <div class="fields">
+        <div class="field"><label>X-POS</label><input id="fX" type="number" value="0"></div>
+        <div class="field"><label>Y-POS</label><input id="fY" type="number" value="0"></div>
+        <div class="field"><label>WIDTH</label><input id="fW" type="number" value="320"></div>
+        <div class="field"><label>HEIGHT</label><input id="fH" type="number" value="256"></div>
+        <div class="field"><label>DEPTH</label><input id="fD" type="number" value="5" min="1" max="8"></div>
+      </div>
+      <div class="statusline" id="status">* No GFX loaded *</div>
+    </div>
+
+    <!-- column 2: file buttons -->
+    <div class="btncol">
+      <button class="abtn wide" id="bLoad">LOAD IMG</button>
+      <button class="abtn wide" id="bSaveRaw">SAVE RAW</button>
+      <button class="abtn wide" id="bSavePal">SAVE PAL</button>
+      <button class="abtn wide" id="bSaveIff">SAVE IFF</button>
+    </div>
+
+    <!-- column 3: mode buttons -->
+    <div class="btncol">
+      <button class="abtn wide on" id="bCmap">CMAP ON</button>
+      <button class="abtn wide" id="bAll">SELECT ALL</button>
+      <button class="abtn wide" id="bGen">PREVIEW</button>
+      <button class="abtn wide" id="bAsm">COPY ASM</button>
+    </div>
+
+    <!-- column 4: info -->
+    <div class="info" id="info">
+      <b>IFF-Converter</b> &mdash; web edition<br>
+      Marquee the area with the cross,<br>
+      pick DEPTH (1&ndash;8 bitplanes, AGA),<br>
+      then SAVE RAW for your demo code.<br>
+      <hr>
+      Tribute to the original by<br>
+      <b>METALLION / KEFRENS</b> (1992).
+    </div>
+  </div>
+
+  <!-- ===================== WORKSPACE ===================== -->
+  <div id="workspace">
+    <div id="stage">
+      <canvas id="imgCanvas" width="320" height="256"></canvas>
+      <canvas id="overlay" width="320" height="256"></canvas>
+    </div>
+    <div id="emptyMsg">click &laquo;LOAD IMG&raquo; to open a PNG / GIF / JPG / IFF&nbsp;ILBM<br>then drag the cross to marquee an area</div>
+
+    <!-- preview popup -->
+    <div id="preview">
+      <div class="ttl">PREVIEW <span id="prevClose">[X]</span></div>
+      <canvas id="prevCanvas" width="320" height="256"></canvas>
+      <div id="palStrip"></div>
+      <div id="prevInfo"></div>
+    </div>
+  </div>
+
+  <!-- ===================== SUBBAR (Sorry for "hardcoded" css ;)  ===================== -->
+  <div id="subbar">
+    <div class="grp">
+      <label>ZOOM</label>
+      <button class="zbtn" id="zOut">&minus;</button>
+      <span id="zLbl" style="font-weight:bold;min-width:34px;text-align:center;">1x</span>
+      <button class="zbtn" id="zIn">+</button>
+    </div>
+    <div class="grp">
+      <label>SNAP-16</label>
+      <button class="zbtn on" id="bSnap" style="min-width:42px;">ON</button>
+    </div>
+    <div class="grp">
+      <label>LAYOUT</label>
+      <select class="asel" id="selLayout">
+        <option value="planar">Planar (plane-by-plane)</option>
+        <option value="inter">Interleaved (line-by-line)</option>
+      </select>
+    </div>
+    <div class="grp">
+      <label>PALETTE</label>
+      <select class="asel" id="selPal">
+        <option value="24">24-bit RGB (AGA)</option>
+        <option value="12">12-bit $0RGB (OCS/ECS)</option>
+      </select>
+    </div>
+    <div class="grp" style="margin-left:auto;font-weight:bold;color:#333;" id="dims">&nbsp;</div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+<input type="file" id="fileInput" accept=".png,.jpg,.jpeg,.gif,.bmp,.iff,.lbm,.ilbm,image/*">
+
+<script>
+"use strict";
+/* ============================================================
+   IFF-Converter — web remake.
+   Converts a selected region of any image into Amiga planar
+   RAW bitplane data + palette, with IFF-ILBM load & save.
+   ============================================================ */
+
+const $ = id => document.getElementById(id);
+
+// ---- state ----
+const S = {
+    img: null, // {data:Uint8ClampedArray RGBA, w, h}
+    zoom: 1,
+    sel: null, // {x,y,w,h}
+    selecting: false,
+    startX: 0,
+    startY: 0,
+    cmap: true,
+    snap16: true,
+    cross: {
+        x: -1,
+        y: -1
+    },
+    lastPalette: null, // last generated palette [[r,g,b],...]
+    lastResult: null, // {indices, w, h, depth, palette}
+};
+
+// ---- DOM refs ----
+const imgC = $('imgCanvas'),
+    imgX = imgC.getContext('2d');
+const ovl = $('overlay'),
+    ovlX = ovl.getContext('2d');
+const stage = $('stage');
+const fX = $('fX'),
+    fY = $('fY'),
+    fW = $('fW'),
+    fH = $('fH'),
+    fD = $('fD');
+
+// ============================================================
+//  UTIL
+// ============================================================
+function toast(msg, ms = 1600) {
+    const t = $('toast');
+    t.textContent = msg;
+    t.style.display = 'block';
+    clearTimeout(toast._t);
+    toast._t = setTimeout(() => t.style.display = 'none', ms);
+}
+
+function clamp(v, a, b) {
+    return v < a ? a : v > b ? b : v;
+}
+
+function downloadBlob(bytes, name, type = 'application/octet-stream') {
+    const blob = bytes instanceof Blob ? bytes : new Blob([bytes], {
+        type
+    });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = name;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => {
+        URL.revokeObjectURL(url);
+        a.remove();
+    }, 100);
+}
+
+// ============================================================
+//  IMAGE LOADING
+// ============================================================
+$('bLoad').onclick = () => $('fileInput').click();
+$('fileInput').onchange = e => {
+    const f = e.target.files[0];
+    if (!f) return;
+    const isIff = /\.(iff|lbm|ilbm)$/i.test(f.name);
+    const reader = new FileReader();
+    reader.onload = () => {
+        try {
+            if (isIff || looksLikeIFF(reader.result)) {
+                const parsed = parseILBM(new Uint8Array(reader.result));
+                setImage(parsed.rgba, parsed.w, parsed.h, f.name, parsed);
+            } else {
+                // standard raster image via <img>
+                const blob = new Blob([reader.result]);
+                const url = URL.createObjectURL(blob);
+                const im = new Image();
+                im.onload = () => {
+                    const c = document.createElement('canvas');
+                    c.width = im.width;
+                    c.height = im.height;
+                    const cx = c.getContext('2d');
+                    cx.imageSmoothingEnabled = false;
+                    cx.drawImage(im, 0, 0);
+                    const d = cx.getImageData(0, 0, im.width, im.height);
+                    URL.revokeObjectURL(url);
+                    setImage(d.data, im.width, im.height, f.name, null);
+                };
+                im.onerror = () => toast('Could not decode image');
+                im.src = url;
+            }
+        } catch (err) {
+            console.error(err);
+            toast('Load error: ' + err.message, 3000);
+        }
+    };
+    reader.readAsArrayBuffer(f);
+    e.target.value = '';
+};
+
+function looksLikeIFF(buf) {
+    const v = new Uint8Array(buf, 0, 4);
+    return v[0] === 0x46 && v[1] === 0x4F && v[2] === 0x52 && v[3] === 0x4D; // "FORM"
+}
+
+function setImage(rgba, w, h, name, iffInfo) {
+    S.img = {
+        data: rgba,
+        w,
+        h
+    };
+    imgC.width = w;
+    imgC.height = h;
+    ovl.width = w;
+    ovl.height = h;
+    const id = new ImageData(new Uint8ClampedArray(rgba), w, h);
+    imgX.putImageData(id, 0, 0);
+    $('emptyMsg').style.display = 'none';
+    // default selection = whole image
+    selectAll();
+    let extra = iffInfo ? ` [IFF ${iffInfo.planes}pl ${iffInfo.mode||''}]` : '';
+    setStatus(`* ${name} ${w}x${h}${extra} *`);
+    if (iffInfo && iffInfo.palette) {
+        // suggest depth from the source
+        fD.value = clamp(iffInfo.planes, 1, 8);
+    }
+    $('dims').textContent = `IMG ${w}x${h}`;
+    applyZoom();
+}
+
+function setStatus(t) {
+    $('status').textContent = t;
+}
+
+// ============================================================
+//  IFF ILBM PARSER  (BMHD/CMAP/CAMG/BODY, ByteRun1, EHB, HAM)
+// ============================================================
+function parseILBM(bytes) {
+    const dv = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);
+    let p = 0;
+    const tag = () => String.fromCharCode(bytes[p], bytes[p + 1], bytes[p + 2], bytes[p + 3]);
+    if (tag() !== 'FORM') throw new Error('Not an IFF FORM');
+    p += 4;
+    const formLen = dv.getUint32(p);
+    p += 4;
+    if (tag() !== 'ILBM') throw new Error('Not ILBM (maybe ANIM/8SVX?)');
+    p += 4;
+    let bmhd = null,
+        cmap = null,
+        camg = 0,
+        bodyOff = -1,
+        bodyLen = 0;
+    const end = Math.min(bytes.length, 8 + formLen);
+    while (p + 8 <= end) {
+        const ck = tag();
+        p += 4;
+        const len = dv.getUint32(p);
+        p += 4;
+        if (ck === 'BMHD') {
+            bmhd = {
+                w: dv.getUint16(p),
+                h: dv.getUint16(p + 2),
+                x: dv.getInt16(p + 4),
+                y: dv.getInt16(p + 6),
+                planes: bytes[p + 8],
+                masking: bytes[p + 9],
+                compression: bytes[p + 10],
+                transparent: dv.getUint16(p + 12),
+                xAspect: bytes[p + 14],
+                yAspect: bytes[p + 15]
+            };
+        } else if (ck === 'CMAP') {
+            const n = Math.floor(len / 3);
+            cmap = [];
+            for (let i = 0; i < n; i++) cmap.push([bytes[p + i * 3], bytes[p + i * 3 + 1], bytes[p + i * 3 + 2]]);
+        } else if (ck === 'CAMG') {
+            camg = dv.getUint32(p);
+        } else if (ck === 'BODY') {
+            bodyOff = p;
+            bodyLen = len;
+        }
+        p += len + (len & 1); // chunks are word-aligned
+    }
+    if (!bmhd) throw new Error('No BMHD chunk');
+    if (bodyOff < 0) throw new Error('No BODY chunk');
+
+    const {
+        w,
+        h,
+        planes,
+        masking,
+        compression
+    } = bmhd;
+    const bytesPerRow = ((w + 15) >> 4) * 2;
+    const planesPerRow = planes + (masking === 1 ? 1 : 0); // mask plane interleaved
+    const rowBytes = bytesPerRow * planesPerRow;
+
+    // ---- decompress / collect body ----
+    let body;
+    if (compression === 1) {
+        body = unpackByteRun1(bytes, bodyOff, bodyLen, rowBytes * h);
+    } else {
+        body = bytes.subarray(bodyOff, bodyOff + rowBytes * h);
+    }
+
+    // ---- planar -> indices ----
+    const indices = new Uint16Array(w * h);
+    for (let y = 0; y < h; y++) {
+        const rowBase = y * rowBytes;
+        for (let pl = 0; pl < planes; pl++) {
+            const planeBase = rowBase + pl * bytesPerRow;
+            const bit = 1 << pl;
+            for (let x = 0; x < w; x++) {
+                const b = body[planeBase + (x >> 3)];
+                if (b & (0x80 >> (x & 7))) indices[y * w + x] |= bit;
+            }
+        }
+    }
+
+    // ---- build RGBA using palette + mode ----
+    const isHAM = (camg & 0x0800) !== 0;
+    const isEHB = (camg & 0x0080) !== 0;
+    let pal = cmap ? cmap.slice() : grayPalette(planes);
+    if (isEHB) { // duplicate with half-bright
+        const base = pal.slice(0, 32);
+        pal = base.concat(base.map(c => [c[0] >> 1, c[1] >> 1, c[2] >> 1]));
+    }
+    const rgba = new Uint8ClampedArray(w * h * 4);
+
+    if (isHAM) {
+        decodeHAM(indices, w, h, planes, pal, rgba);
+    } else {
+        for (let i = 0; i < w * h; i++) {
+            const c = pal[indices[i]] || [0, 0, 0];
+            const o = i * 4;
+            rgba[o] = c[0];
+            rgba[o + 1] = c[1];
+            rgba[o + 2] = c[2];
+            rgba[o + 3] = 255;
+        }
+    }
+    let mode = isHAM ? (planes >= 7 ? 'HAM8' : 'HAM6') : (isEHB ? 'EHB' : '');
+    return {
+        rgba,
+        w,
+        h,
+        planes,
+        palette: pal,
+        mode
+    };
+}
+
+function unpackByteRun1(bytes, off, len, outSize) {
+    const out = new Uint8Array(outSize);
+    let o = 0,
+        p = off,
+        end = off + len;
+    while (p < end && o < outSize) {
+        let n = bytes[p++];
+        if (n > 127) n -= 256;
+        if (n >= 0) {
+            for (let i = 0; i <= n && p < end; i++) out[o++] = bytes[p++];
+        } else if (n !== -128) {
+            const v = bytes[p++];
+            for (let i = 0; i < -n + 1; i++) out[o++] = v;
+        }
+    }
+    return out;
+}
+
+function grayPalette(planes) {
+    const n = 1 << planes,
+        pal = [];
+    for (let i = 0; i < n; i++) {
+        const v = Math.round(i * 255 / (n - 1));
+        pal.push([v, v, v]);
+    }
+    return pal;
+}
+
+function decodeHAM(indices, w, h, planes, pal, rgba) {
+    // HAM6: planes=6 -> 4 data + 2 ctrl ; HAM8: planes=8 -> 6 data + 2 ctrl
+    const ham8 = planes >= 7;
+    const dataBits = ham8 ? 6 : 4;
+    const dataMask = (1 << dataBits) - 1;
+    const ctrlShift = dataBits;
+    for (let y = 0; y < h; y++) {
+        let r = pal[0] ? pal[0][0] : 0,
+            g = pal[0] ? pal[0][1] : 0,
+            b = pal[0] ? pal[0][2] : 0;
+        for (let x = 0; x < w; x++) {
+            const v = indices[y * w + x];
+            const ctrl = (v >> ctrlShift) & 3;
+            const d = v & dataMask;
+            if (ctrl === 0) {
+                const c = pal[d] || [0, 0, 0];
+                r = c[0];
+                g = c[1];
+                b = c[2];
+            } else {
+                const val = ham8 ? (d << 2) | (d >> 4) : (d << 4) | d; // expand 6/4-bit to 8
+                if (ctrl === 1) b = val;
+                else if (ctrl === 2) r = val;
+                else g = val;
+            }
+            const o = (y * w + x) * 4;
+            rgba[o] = r;
+            rgba[o + 1] = g;
+            rgba[o + 2] = b;
+            rgba[o + 3] = 255;
+        }
+    }
+}
+
+// ============================================================
+//  ZOOM
+// ============================================================
+function applyZoom() {
+    stage.style.transform = `scale(${S.zoom})`;
+    $('zLbl').textContent = S.zoom + 'x';
+}
+$('zIn').onclick = () => {
+    S.zoom = clamp(S.zoom + 1, 1, 12);
+    applyZoom();
+};
+$('zOut').onclick = () => {
+    S.zoom = clamp(S.zoom - 1, 1, 12);
+    applyZoom();
+};
+
+// ============================================================
+//  SELECTION (crosshair marquee)
+// ============================================================
+function getImgCoord(ev) {
+    const r = ovl.getBoundingClientRect();
+    const x = Math.floor((ev.clientX - r.left) / S.zoom);
+    const y = Math.floor((ev.clientY - r.top) / S.zoom);
+    return {
+        x: clamp(x, 0, S.img.w - 1),
+        y: clamp(y, 0, S.img.h - 1)
+    };
+}
+ovl.addEventListener('mousedown', ev => {
+    if (!S.img) return;
+    const c = getImgCoord(ev);
+    S.selecting = true;
+    S.startX = c.x;
+    S.startY = c.y;
+    S.sel = {
+        x: c.x,
+        y: c.y,
+        w: 1,
+        h: 1
+    };
+    drawOverlay();
+});
+ovl.addEventListener('mousemove', ev => {
+    if (!S.img) return;
+    const c = getImgCoord(ev);
+    S.cross = c;
+    if (S.selecting) {
+        let x0 = Math.min(S.startX, c.x),
+            y0 = Math.min(S.startY, c.y);
+        let x1 = Math.max(S.startX, c.x) + 1,
+            y1 = Math.max(S.startY, c.y) + 1;
+        let w = x1 - x0,
+            h = y1 - y0;
+        if (S.snap16) {
+            w = Math.max(16, Math.round(w / 16) * 16);
+            if (x0 + w > S.img.w) x0 = Math.max(0, S.img.w - w);
+        }
+        S.sel = {
+            x: x0,
+            y: y0,
+            w,
+            h
+        };
+        syncFieldsFromSel();
+    }
+    drawOverlay();
+});
+window.addEventListener('mouseup', () => {
+    if (S.selecting) {
+        S.selecting = false;
+        clampSel();
+        syncFieldsFromSel();
+        drawOverlay();
+    }
+});
+ovl.addEventListener('mouseleave', () => {
+    if (!S.selecting) {
+        S.cross = {
+            x: -1,
+            y: -1
+        };
+        drawOverlay();
+    }
+});
+
+function clampSel() {
+    if (!S.sel || !S.img) return;
+    let s = S.sel;
+    s.x = clamp(s.x, 0, S.img.w - 1);
+    s.y = clamp(s.y, 0, S.img.h - 1);
+    s.w = clamp(s.w, 1, S.img.w - s.x);
+    s.h = clamp(s.h, 1, S.img.h - s.y);
+    if (S.snap16) {
+        s.w = Math.max(16, Math.round(s.w / 16) * 16);
+        if (s.x + s.w > S.img.w) s.w = Math.floor((S.img.w - s.x) / 16) * 16 || 16;
+    }
+}
+
+function selectAll() {
+    if (!S.img) return;
+    let w = S.img.w;
+    if (S.snap16) w = Math.floor(w / 16) * 16 || w;
+    S.sel = {
+        x: 0,
+        y: 0,
+        w: w,
+        h: S.img.h
+    };
+    syncFieldsFromSel();
+    drawOverlay();
+}
+$('bAll').onclick = selectAll;
+
+function syncFieldsFromSel() {
+    if (!S.sel) return;
+    fX.value = S.sel.x;
+    fY.value = S.sel.y;
+    fW.value = S.sel.w;
+    fH.value = S.sel.h;
+    updateDims();
+}
+
+function syncSelFromFields() {
+    if (!S.img) return;
+    S.sel = {
+        x: clamp(+fX.value || 0, 0, S.img.w - 1),
+        y: clamp(+fY.value || 0, 0, S.img.h - 1),
+        w: Math.max(1, +fW.value || 1),
+        h: Math.max(1, +fH.value || 1)
+    };
+    clampSel();
+    syncFieldsFromSel();
+    drawOverlay();
+}
+[fX, fY, fW, fH].forEach(inp => inp.addEventListener('change', syncSelFromFields));
+fD.addEventListener('change', () => {
+    fD.value = clamp(+fD.value || 1, 1, 8);
+    updateDims();
+});
+
+function updateDims() {
+    const w = +fW.value || 0,
+        h = +fH.value || 0,
+        d = clamp(+fD.value || 1, 1, 8);
+    const bpr = ((w + 15) >> 4) * 2;
+    const raw = bpr * h * d;
+    $('dims').textContent = `SEL ${w}x${h}  ${d}pl  rowbytes:${bpr}  RAW:${raw}b (${(raw/1024).toFixed(1)}k)`;
+}
+
+// ============================================================
+//  OVERLAY DRAW (crosshair + marquee)
+// ============================================================
+function drawOverlay() {
+    const w = ovl.width,
+        h = ovl.height;
+    ovlX.clearRect(0, 0, w, h);
+    // marquee
+    if (S.sel) {
+        const s = S.sel;
+        ovlX.fillStyle = 'rgba(255,155,51,0.14)';
+        ovlX.fillRect(s.x, s.y, s.w, s.h);
+        ovlX.strokeStyle = '#ff9b33';
+        ovlX.lineWidth = 1;
+        ovlX.strokeRect(s.x + 0.5, s.y + 0.5, s.w - 1, s.h - 1);
+        // corner ticks
+        ovlX.fillStyle = '#ffd24a';
+        const t = 2;
+        [
+            [s.x, s.y],
+            [s.x + s.w - 1, s.y],
+            [s.x, s.y + s.h - 1],
+            [s.x + s.w - 1, s.y + s.h - 1]
+        ].forEach(([cx, cy]) => {
+            ovlX.fillRect(cx - t, cy - t, t * 2 + 1, t * 2 + 1);
+        });
+    }
+    // crosshair
+    if (S.cross.x >= 0) {
+        const cx = S.cross.x + 0.5,
+            cy = S.cross.y + 0.5;
+        ovlX.strokeStyle = '#ff9b33';
+        ovlX.lineWidth = 1;
+        ovlX.beginPath();
+        ovlX.moveTo(0, cy);
+        ovlX.lineTo(w, cy);
+        ovlX.moveTo(cx, 0);
+        ovlX.lineTo(cx, h);
+        ovlX.stroke();
+        // small box at cursor
+        ovlX.strokeStyle = '#ffd24a';
+        ovlX.strokeRect(S.cross.x - 3.5, S.cross.y - 3.5, 7, 7);
+    }
+}
+
+// ============================================================
+//  COLOR QUANTIZATION  (median cut, population-weighted)
+// ============================================================
+function extractRegion() {
+    const s = S.sel,
+        src = S.img.data,
+        W = S.img.w;
+    const px = new Uint8Array(s.w * s.h * 3);
+    for (let y = 0; y < s.h; y++) {
+        for (let x = 0; x < s.w; x++) {
+            const so = ((s.y + y) * W + (s.x + x)) * 4,
+                o = (y * s.w + x) * 3;
+            px[o] = src[so];
+            px[o + 1] = src[so + 1];
+            px[o + 2] = src[so + 2];
+        }
+    }
+    return px; // RGB triples
+}
+
+function histogram(px) {
+    const map = new Map();
+    for (let i = 0; i < px.length; i += 3) {
+        const key = (px[i] << 16) | (px[i + 1] << 8) | px[i + 2];
+        map.set(key, (map.get(key) || 0) + 1);
+    }
+    const arr = [];
+    for (const [k, count] of map) arr.push({
+        r: (k >> 16) & 255,
+        g: (k >> 8) & 255,
+        b: k & 255,
+        count
+    });
+    return arr;
+}
+
+function quantize(colors, maxColors) {
+    if (colors.length <= maxColors) return colors.map(c => [c.r, c.g, c.b]);
+    let boxes = [colors.slice()];
+    const ranges = box => {
+        let rmin = 255,
+            rmax = 0,
+            gmin = 255,
+            gmax = 0,
+            bmin = 255,
+            bmax = 0;
+        for (const c of box) {
+            if (c.r < rmin) rmin = c.r;
+            if (c.r > rmax) rmax = c.r;
+            if (c.g < gmin) gmin = c.g;
+            if (c.g > gmax) gmax = c.g;
+            if (c.b < bmin) bmin = c.b;
+            if (c.b > bmax) bmax = c.b;
+        }
+        return {
+            r: rmax - rmin,
+            g: gmax - gmin,
+            b: bmax - bmin
+        };
+    };
+    while (boxes.length < maxColors) {
+        let bi = -1,
+            best = -1;
+        for (let i = 0; i < boxes.length; i++) {
+            if (boxes[i].length < 2) continue;
+            const rg = ranges(boxes[i]);
+            const sc = Math.max(rg.r, rg.g, rg.b);
+            if (sc > best) {
+                best = sc;
+                bi = i;
+            }
+        }
+        if (bi < 0) break;
+        const box = boxes[bi],
+            rg = ranges(box);
+        const ch = rg.r >= rg.g && rg.r >= rg.b ? 'r' : (rg.g >= rg.b ? 'g' : 'b');
+        box.sort((a, b) => a[ch] - b[ch]);
+        const total = box.reduce((s, c) => s + c.count, 0);
+        let acc = 0,
+            mid = 0;
+        for (mid = 0; mid < box.length - 1; mid++) {
+            acc += box[mid].count;
+            if (acc >= total / 2) break;
+        }
+        boxes.splice(bi, 1, box.slice(0, mid + 1), box.slice(mid + 1));
+    }
+    return boxes.map(box => {
+        let r = 0,
+            g = 0,
+            b = 0,
+            n = 0;
+        for (const c of box) {
+            r += c.r * c.count;
+            g += c.g * c.count;
+            b += c.b * c.count;
+            n += c.count;
+        }
+        return [Math.round(r / n), Math.round(g / n), Math.round(b / n)];
+    });
+}
+
+function reduce12(pal) { // round each channel to 4-bit and back
+    return pal.map(c => c.map(v => {
+        const n = (v + 8) >> 4;
+        return clamp(n, 0, 15) * 17;
+    }));
+}
+
+function nearest(pal, r, g, b) {
+    let bi = 0,
+        bd = Infinity;
+    for (let i = 0; i < pal.length; i++) {
+        const dr = pal[i][0] - r,
+            dg = pal[i][1] - g,
+            db = pal[i][2] - b;
+        const d = dr * dr + dg * dg + db * db;
+        if (d < bd) {
+            bd = d;
+            bi = i;
+        }
+    }
+    return bi;
+}
+
+// build {indices,w,h,depth,palette} for current selection+depth
+function buildResult() {
+    if (!S.img || !S.sel) {
+        toast('Load an image and marquee an area first');
+        return null;
+    }
+    clampSel();
+    const depth = clamp(+fD.value || 1, 1, 8);
+    const maxColors = 1 << depth;
+    const px = extractRegion();
+    const hist = histogram(px);
+    let pal = quantize(hist, maxColors);
+    if ($('selPal').value === '12') pal = reduce12(pal);
+    // pad palette to full size with black
+    while (pal.length < maxColors) pal.push([0, 0, 0]);
+
+    // map pixels -> indices via cache
+    const cache = new Map();
+    const w = S.sel.w,
+        h = S.sel.h;
+    const indices = new Uint16Array(w * h);
+    for (let i = 0; i < w * h; i++) {
+        const o = i * 3,
+            key = (px[o] << 16) | (px[o + 1] << 8) | px[o + 2];
+        let idx = cache.get(key);
+        if (idx === undefined) {
+            idx = nearest(pal, px[o], px[o + 1], px[o + 2]);
+            cache.set(key, idx);
+        }
+        indices[i] = idx;
+    }
+    const res = {
+        indices,
+        w,
+        h,
+        depth,
+        palette: pal,
+        uniqueColors: hist.length
+    };
+    S.lastResult = res;
+    S.lastPalette = pal;
+    return res;
+}
+
+// ============================================================
+//  RAW BITPLANE GENERATION
+// ============================================================
+function generateRAW(res, interleaved) {
+    const {
+        indices,
+        w,
+        h,
+        depth
+    } = res;
+    const wordsPerRow = (w + 15) >> 4;
+    const bytesPerRow = wordsPerRow * 2;
+    const out = new Uint8Array(bytesPerRow * h * depth);
+    let ptr = 0;
+    const writeRow = (y, pl) => {
+        for (let wd = 0; wd < wordsPerRow; wd++) {
+            let word = 0;
+            for (let bit = 0; bit < 16; bit++) {
+                const x = wd * 16 + bit;
+                if (x < w && ((indices[y * w + x] >> pl) & 1)) word |= (0x8000 >> bit);
+            }
+            out[ptr++] = (word >> 8) & 0xff;
+            out[ptr++] = word & 0xff;
+        }
+    };
+    if (!interleaved) {
+        for (let pl = 0; pl < depth; pl++)
+            for (let y = 0; y < h; y++) writeRow(y, pl);
+    } else {
+        for (let y = 0; y < h; y++)
+            for (let pl = 0; pl < depth; pl++) writeRow(y, pl);
+    }
+    return out;
+}
+
+// ============================================================
+//  PALETTE EXPORT
+// ============================================================
+function generatePalette(pal, bits) {
+    if (bits === 12) {
+        // 16-bit words, $0RGB, big-endian
+        const out = new Uint8Array(pal.length * 2);
+        for (let i = 0; i < pal.length; i++) {
+            const r = (pal[i][0] + 8) >> 4 & 0xf,
+                g = (pal[i][1] + 8) >> 4 & 0xf,
+                b = (pal[i][2] + 8) >> 4 & 0xf;
+            const word = (r << 8) | (g << 4) | b;
+            out[i * 2] = (word >> 8) & 0xff;
+            out[i * 2 + 1] = word & 0xff;
+        }
+        return out;
+    } else {
+        // 24-bit RGB triples
+        const out = new Uint8Array(pal.length * 3);
+        for (let i = 0; i < pal.length; i++) {
+            out[i * 3] = pal[i][0];
+            out[i * 3 + 1] = pal[i][1];
+            out[i * 3 + 2] = pal[i][2];
+        }
+        return out;
+    }
+}
+
+// ============================================================
+//  IFF ILBM SAVE  (uncompressed)
+// ============================================================
+function buildILBMfile(res) {
+    const {
+        indices,
+        w,
+        h,
+        depth,
+        palette
+    } = res;
+    const bytesPerRow = ((w + 15) >> 4) * 2;
+    const bodyRowBytes = bytesPerRow * depth;
+    const body = new Uint8Array(bodyRowBytes * h);
+    let bp = 0;
+    for (let y = 0; y < h; y++) {
+        for (let pl = 0; pl < depth; pl++) {
+            for (let wd = 0; wd < bytesPerRow; wd += 2) {
+                let word = 0;
+                for (let bit = 0; bit < 16; bit++) {
+                    const x = (wd * 8) + bit;
+                    if (x < w && ((indices[y * w + x] >> pl) & 1)) word |= (0x8000 >> bit);
+                }
+                body[bp++] = (word >> 8) & 0xff;
+                body[bp++] = word & 0xff;
+            }
+        }
+    }
+    const ncol = 1 << depth;
+    const cmapLen = ncol * 3;
+    // chunk sizes (BMHD 20, CMAP cmapLen, CAMG 4, BODY body.length)
+    const camg = depth > 5 ? 0 : 0; // plain mode; AGA hires not flagged
+    const chunks = [];
+    const pushChunk = (name, data) => {
+        const len = data.length;
+        const hdr = new Uint8Array(8);
+        for (let i = 0; i < 4; i++) hdr[i] = name.charCodeAt(i);
+        hdr[4] = (len >> 24) & 255;
+        hdr[5] = (len >> 16) & 255;
+        hdr[6] = (len >> 8) & 255;
+        hdr[7] = len & 255;
+        chunks.push(hdr, data);
+        if (len & 1) chunks.push(new Uint8Array(1)); // pad
+    };
+    // BMHD
+    const bmhd = new Uint8Array(20);
+    const bd = new DataView(bmhd.buffer);
+    bd.setUint16(0, w);
+    bd.setUint16(2, h);
+    bd.setInt16(4, 0);
+    bd.setInt16(6, 0);
+    bmhd[8] = depth;
+    bmhd[9] = 0;
+    bmhd[10] = 0;
+    bmhd[11] = 0; // no mask, no compress
+    bd.setUint16(12, 0);
+    bmhd[14] = 10;
+    bmhd[15] = 11; // aspect 10:11
+    bd.setUint16(16, w);
+    bd.setUint16(18, h);
+    pushChunk('BMHD', bmhd);
+    // CMAP
+    const cmap = new Uint8Array(cmapLen);
+    for (let i = 0; i < ncol; i++) {
+        const c = palette[i] || [0, 0, 0];
+        cmap[i * 3] = c[0];
+        cmap[i * 3 + 1] = c[1];
+        cmap[i * 3 + 2] = c[2];
+    }
+    pushChunk('CMAP', cmap);
+    // CAMG
+    const camgB = new Uint8Array(4);
+    new DataView(camgB.buffer).setUint32(0, camg);
+    pushChunk('CAMG', camgB);
+    // BODY
+    pushChunk('BODY', body);
+
+    // assemble FORM
+    let inner = 0;
+    for (const c of chunks) inner += c.length;
+    const formLen = 4 + inner; // "ILBM" + chunks
+    const head = new Uint8Array(12);
+    const put = (off, s) => {
+        for (let i = 0; i < 4; i++) head[off + i] = s.charCodeAt(i);
+    };
+    put(0, 'FORM');
+    head[4] = (formLen >> 24) & 255;
+    head[5] = (formLen >> 16) & 255;
+    head[6] = (formLen >> 8) & 255;
+    head[7] = formLen & 255;
+    put(8, 'ILBM');
+    const total = 12 + inner;
+    const file = new Uint8Array(total);
+    file.set(head, 0);
+    let off = 12;
+    for (const c of chunks) {
+        file.set(c, off);
+        off += c.length;
+    }
+    return file;
+}
+
+// ============================================================
+//  BUTTON HANDLERS — SAVE
+// ============================================================
+function baseName() {
+    const m = $('status').textContent.match(/\*\s*([^\s]+)/);
+    let n = m ? m[1].replace(/\.[^.]+$/, '') : 'image';
+    return n.replace(/[^\w\-]/g, '_');
+}
+$('bSaveRaw').onclick = () => {
+    const res = buildResult();
+    if (!res) return;
+    const interleaved = $('selLayout').value === 'inter';
+    const raw = generateRAW(res, interleaved);
+    downloadBlob(raw, baseName() + '.raw');
+    showPreview(res);
+    toast(`Saved ${raw.length} bytes RAW (${res.depth} planes)`);
+};
+$('bSavePal').onclick = () => {
+    const res = buildResult();
+    if (!res) return;
+    if (!S.cmap) {
+        toast('CMAP is OFF — turn it on to save palette');
+        return;
+    }
+    const bits = $('selPal').value === '12' ? 12 : 24;
+    const pal = generatePalette(res.palette, bits);
+    downloadBlob(pal, baseName() + (bits === 12 ? '.pal' : '.pal24'));
+    showPreview(res);
+    toast(`Saved palette: ${res.palette.length} colors @ ${bits}-bit`);
+};
+$('bSaveIff').onclick = () => {
+    const res = buildResult();
+    if (!res) return;
+    const file = buildILBMfile(res);
+    downloadBlob(file, baseName() + '.iff');
+    showPreview(res);
+    toast(`Saved IFF ILBM (${res.depth} planes, ${file.length} bytes)`);
+};
+
+// ============================================================
+//  PREVIEW POPUP
+// ============================================================
+function showPreview(res) {
+    res = res || S.lastResult;
+    if (!res) return;
+    const {
+        indices,
+        w,
+        h,
+        palette
+    } = res;
+    const pc = $('prevCanvas');
+    pc.width = w;
+    pc.height = h;
+    const pcx = pc.getContext('2d');
+    const id = pcx.createImageData(w, h);
+    for (let i = 0; i < w * h; i++) {
+        const c = palette[indices[i]] || [0, 0, 0];
+        const o = i * 4;
+        id.data[o] = c[0];
+        id.data[o + 1] = c[1];
+        id.data[o + 2] = c[2];
+        id.data[o + 3] = 255;
+    }
+    pcx.putImageData(id, 0, 0);
+    // palette strip
+    const strip = $('palStrip');
+    strip.innerHTML = '';
+    palette.forEach(c => {
+        const d = document.createElement('div');
+        d.style.background = `rgb(${c[0]},${c[1]},${c[2]})`;
+        strip.appendChild(d);
+    });
+    const bpr = ((w + 15) >> 4) * 2;
+    $('prevInfo').textContent = `${w}x${h} • ${res.depth}pl • ${res.palette.length} cols • src had ${res.uniqueColors} • RAW ${bpr*h*res.depth}b`;
+    $('preview').style.display = 'block';
+}
+$('bGen').onclick = () => {
+    const res = buildResult();
+    if (res) showPreview(res);
+};
+$('prevClose').onclick = () => {
+    $('preview').style.display = 'none';
+};
+
+// ============================================================
+//  COPY ASM (palette + RAW metadata as assembler include)
+// ============================================================
+$('bAsm').onclick = async () => {
+    const res = buildResult();
+    if (!res) return;
+    const {
+        w,
+        h,
+        depth,
+        palette
+    } = res;
+    const bpr = ((w + 15) >> 4) * 2;
+    const name = baseName();
+    let asm = '';
+    asm += `; ==== ${name} — generated by IFF-Converter (web remake) ====\n`;
+    asm += `${name}_WIDTH   = ${w}\n`;
+    asm += `${name}_HEIGHT  = ${h}\n`;
+    asm += `${name}_DEPTH   = ${depth}\n`;
+    asm += `${name}_BPR     = ${bpr}      ; bytes per row (word aligned)\n`;
+    asm += `${name}_PLANESZ = ${bpr*h}    ; one bitplane in bytes\n`;
+    asm += `${name}_RAWSIZE = ${bpr*h*depth}\n\n`;
+    asm += `${name}_pal:\n`;
+    if ($('selPal').value === '12') {
+        for (let i = 0; i < palette.length; i++) {
+            const c = palette[i];
+            const r = (c[0] + 8) >> 4 & 0xf,
+                g = (c[1] + 8) >> 4 & 0xf,
+                b = (c[2] + 8) >> 4 & 0xf;
+            const word = ((r << 8) | (g << 4) | b);
+            asm += `    dc.w $${word.toString(16).padStart(4,'0')}\n`;
+        }
+    } else {
+        for (let i = 0; i < palette.length; i++) {
+            const c = palette[i];
+            asm += `    dc.l $${((c[0]<<16)|(c[1]<<8)|c[2]).toString(16).padStart(6,'0')}  ; col ${i}\n`;
+        }
+    }
+    try {
+        await navigator.clipboard.writeText(asm);
+        toast('ASM include copied to clipboard');
+    } catch (e) {
+        // fallback: download
+        downloadBlob(new TextEncoder().encode(asm), name + '.i', 'text/plain');
+        toast('Clipboard blocked — downloaded .i file instead');
+    }
+};
+
+// ============================================================
+//  TOGGLES
+// ============================================================
+$('bCmap').onclick = () => {
+    S.cmap = !S.cmap;
+    const b = $('bCmap');
+    b.textContent = 'CMAP ' + (S.cmap ? 'ON' : 'OFF');
+    b.classList.toggle('on', S.cmap);
+};
+$('bSnap').onclick = () => {
+    S.snap16 = !S.snap16;
+    const b = $('bSnap');
+    b.textContent = S.snap16 ? 'ON' : 'OFF';
+    b.classList.toggle('on', S.snap16);
+    if (S.sel) {
+        clampSel();
+        syncFieldsFromSel();
+        drawOverlay();
+    }
+};
+
+// init
+updateDims();
+applyZoom();
+</script>
+</body>
+</html>
